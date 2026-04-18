@@ -30,6 +30,7 @@ install_skill() {
 install_hooks() {
     chmod +x "$REPO_DIR/hooks/pre_session.sh"
     chmod +x "$REPO_DIR/hooks/secret_leak_check.py"
+    chmod +x "$REPO_DIR/hooks/tier2_guard.py"
 
     if [[ ! -f "$SETTINGS_FILE" ]]; then
         echo '{}' > "$SETTINGS_FILE"
@@ -61,6 +62,24 @@ if not already_installed:
         'hooks': [{
             'type': 'command',
             'command': leak_cmd
+        }]
+    })
+
+# Add PreToolUse hook for Tier 2 access guard (if not already present)
+pre_hooks = hooks.setdefault('PreToolUse', [])
+guard_cmd = 'python3 $REPO_DIR/hooks/tier2_guard.py'
+
+guard_installed = any(
+    any(h.get('command', '') == guard_cmd for h in entry.get('hooks', []))
+    for entry in pre_hooks
+)
+
+if not guard_installed:
+    pre_hooks.append({
+        'matcher': 'Bash',
+        'hooks': [{
+            'type': 'command',
+            'command': guard_cmd
         }]
     })
 
