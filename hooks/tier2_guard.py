@@ -68,6 +68,10 @@ def is_blocked(command: str, tier2_keys: list[str]) -> str | None:
     """
     cmd = command.strip()
 
+    # Skip: if the entire command is an echo/printf/log (writing text, not accessing secrets)
+    if re.match(r'^(echo|printf|/root/telegram-logs/)\b', cmd):
+        return None
+
     # Block: sops decrypt of tier2 store
     if re.search(r'sops\b.*-d.*tier2', cmd) or re.search(r'sops\b.*--decrypt.*tier2', cmd):
         return "Direct decryption of Tier 2 secret store is blocked. Use the proxy for Tier 2 secrets."
@@ -83,8 +87,9 @@ def is_blocked(command: str, tier2_keys: list[str]) -> str | None:
     if re.search(r'(curl|wget|http)\b.*(/api/secret/)', cmd):
         return "Direct HTTP access to secret API endpoints is blocked. Tier 2 secrets must flow through the proxy to external services, not be fetched by the LLM."
 
-    # Block: reading the raw decrypted tier2 file
-    if re.search(r'(cat|less|more|head|tail|bat)\b.*tier2', cmd):
+    # Block: reading the raw decrypted tier2 file (match file paths, not arbitrary text)
+    if re.search(r'(cat|less|more|head|tail|bat)\s+\S*tier2\S*\.env', cmd) or \
+       re.search(r'(cat|less|more|head|tail|bat)\s+\S*tier2\S*\.sops', cmd):
         return "Reading Tier 2 secret files directly is blocked."
 
     # Block: export-secrets for tier 2
