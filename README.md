@@ -126,6 +126,65 @@ Injection modes:
 - `header` — adds `<inject_name>: <inject_prefix><secret>` header
 - `query` — appends `?<inject_name>=<secret>` to URL
 
+### Transaction Signing (Private Keys)
+
+For blockchain private keys, the proxy can **sign and send transactions** without Claude ever seeing the key:
+
+```json
+{
+  "my-wallet": {
+    "type": "signer",
+    "secret_key": "MY_PRIVATE_KEY",
+    "rpc_url": "https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY",
+    "chain_id": 1,
+    "max_value": "0.1",
+    "allowed_contracts": ["0x..."],
+    "require_confirmation": false
+  }
+}
+```
+
+```bash
+# Check wallet address & balance (Claude never sees the private key)
+curl http://localhost:9999/sign/my-wallet/address
+
+# Sign and send a transaction
+curl -X POST http://localhost:9999/sign/my-wallet/send \
+  -H "Content-Type: application/json" \
+  -d '{"to": "0xRecipient...", "value": 100000000000000000}'
+# → Returns tx hash + explorer link. Private key never leaves the proxy.
+```
+
+**Safety features:**
+- `max_value` — caps ETH per transaction (default: 0.1 ETH). Prevents catastrophic sends.
+- `allowed_contracts` — whitelist of destination addresses. Empty = any address allowed.
+- `require_confirmation` — if `true`, returns unsigned tx for human review before signing.
+- **Audit log** — all transactions logged to `~/.claude-sops/tx-log.jsonl` (without private keys).
+- EIP-1559 auto-detection — uses `maxFeePerGas` when available, falls back to legacy gas price.
+- Gas estimation with 20% buffer.
+
+**Signing endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/sign/<wallet>/address` | GET | Wallet address + balance |
+| `/sign/<wallet>/balance` | GET | Current balance |
+| `/sign/<wallet>/nonce` | GET | Current nonce |
+| `/sign/<wallet>/send` | POST | Sign + broadcast tx |
+| `/sign/<wallet>/sign` | POST | Sign only (return raw signed tx) |
+
+**Transaction parameters (POST body):**
+```json
+{
+  "to": "0xRecipientAddress",
+  "value": 100000000000000000,
+  "data": "0xcalldata...",
+  "gas": 21000,
+  "maxFeePerGas": 30000000000,
+  "maxPriorityFeePerGas": 1000000000
+}
+```
+Only `to` is required. Gas and fees are auto-estimated if omitted.
+
 ## Security Model
 
 ### What's protected
@@ -197,8 +256,13 @@ claude-sops/
 ├── web-input/
 │   ├── server.py         # One-shot web form server
 │   └── index.html        # Secret input form
-└── proxy/
-    └── server.py         # Zero-knowledge proxy server
+├── proxy/
+│   ├── server.py         # Zero-knowledge proxy server
+│   └── signer.py         # Transaction signing module
+└── hooks/
+    ├── secret_leak_check.py  # Stop hook: detects leaked Tier 2 values
+    ├── tier2_guard.py        # PreToolUse hook: blocks Tier 2 access attempts
+    └── pre_session.sh        # Auto-starts proxy, lists available secrets
 ```
 
 After setup, secrets are stored in:

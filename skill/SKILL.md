@@ -69,6 +69,47 @@ curl http://localhost:9999/route-name/api/endpoint
 ### `proxy-config`
 Show or edit proxy route configuration at `~/.claude-sops/proxy-routes.json`.
 
+### Transaction Signing (Tier 2 wallets)
+
+If the proxy has signer wallets configured (`"type": "signer"` in routes), Claude can
+sign and send transactions without ever seeing the private key:
+
+```bash
+# Check wallet address & balance
+curl http://localhost:9999/sign/my-wallet/address
+
+# Sign and send a transaction
+curl -X POST http://localhost:9999/sign/my-wallet/send \
+  -H "Content-Type: application/json" \
+  -d '{"to": "0x...", "value": 1000000000000000}'
+
+# Sign without broadcasting (for review)
+curl -X POST http://localhost:9999/sign/my-wallet/sign \
+  -H "Content-Type: application/json" \
+  -d '{"to": "0x...", "value": 1000000000000000}'
+```
+
+Signer route config in `proxy-routes.json`:
+```json
+{
+  "my-wallet": {
+    "type": "signer",
+    "secret_key": "MY_PRIVATE_KEY",
+    "rpc_url": "https://eth-mainnet.g.alchemy.com/v2/...",
+    "chain_id": 1,
+    "max_value": "0.1",
+    "allowed_contracts": [],
+    "require_confirmation": false
+  }
+}
+```
+
+Safety features:
+- **max_value**: caps ETH value per tx (default 0.1 ETH)
+- **allowed_contracts**: whitelist of destination addresses (empty = any)
+- **require_confirmation**: returns unsigned tx for review first
+- All transactions logged to `~/.claude-sops/tx-log.jsonl`
+
 ### `status`
 ```bash
 claude-sops status
