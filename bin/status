@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Health check for claude-sops setup.
+
+SOPS_DIR="${CLAUDE_SOPS_DIR:-$HOME/.claude-sops}"
+KEY_FILE="$SOPS_DIR/age-key.txt"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+check() {
+    if eval "$2" &>/dev/null; then
+        echo -e "  ${GREEN}[ok]${NC} $1"
+    else
+        echo -e "  ${RED}[!!]${NC} $1"
+    fi
+}
+
+echo "claude-sops status"
+echo "=================="
+echo ""
+
+check "age installed"           "command -v age"
+check "sops installed"          "command -v sops"
+check "Age key exists"          "[[ -f '$KEY_FILE' ]]"
+check "SOPS_AGE_KEY_FILE set"   "[[ -n '${SOPS_AGE_KEY_FILE:-}' ]]"
+check ".sops.yaml exists"       "[[ -f '$HOME/.sops.yaml' ]]"
+check "Secrets dir exists"      "[[ -d '$SOPS_DIR/secrets' ]]"
+check "Tier 1 store exists"     "[[ -f '$SOPS_DIR/secrets/tier1.env.sops' ]]"
+check "Tier 2 store exists"     "[[ -f '$SOPS_DIR/secrets/tier2.env.sops' ]]"
+check "Proxy routes config"     "[[ -f '$SOPS_DIR/proxy-routes.json' ]]"
+
+echo ""
+if [[ -f "$SOPS_DIR/age-public-key.txt" ]]; then
+    echo "Public key: $(cat "$SOPS_DIR/age-public-key.txt")"
+fi
+echo "Secrets dir: $SOPS_DIR/secrets/"
+echo ""

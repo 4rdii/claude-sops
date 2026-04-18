@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# claude-sops: Main CLI entry point
+# Usage: claude-sops <command> [args...]
+
+SOPS_DIR="${CLAUDE_SOPS_DIR:-$HOME/.claude-sops}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+
+usage() {
+    cat <<EOF
+Usage: claude-sops <command> [args...]
+
+Secret Management:
+  add <KEY> <VALUE>       Add/update a secret (Tier 1: LLM can decrypt)
+  add-private <KEY> <VALUE>  Add a Tier 2 secret (LLM never sees it)
+  remove <KEY>            Remove a secret
+  list                    List secret keys (not values)
+  get <KEY>               Decrypt and print a secret value (Tier 1 only)
+
+Input:
+  web-input [--port PORT] Start one-time web form for secret input (default: 8888)
+
+Proxy (Tier 2 - Zero Knowledge):
+  proxy [--port PORT]     Start the secret-injecting proxy (default: 9999)
+  proxy-config            Show/edit proxy route configuration
+
+Utilities:
+  rotate-keys             Generate new age key and re-encrypt all secrets
+  export                  Export all Tier 1 secrets as .env (plaintext, be careful!)
+  status                  Show setup status and health check
+
+EOF
+}
+
+case "${1:-}" in
+    add)
+        shift
+        "$SCRIPT_DIR/add-secret" --tier 1 "$@"
+        ;;
+    add-private)
+        shift
+        "$SCRIPT_DIR/add-secret" --tier 2 "$@"
+        ;;
+    remove)
+        shift
+        "$SCRIPT_DIR/remove-secret" "$@"
+        ;;
+    list)
+        "$SCRIPT_DIR/list-secrets"
+        ;;
+    get)
+        shift
+        "$SCRIPT_DIR/get-secret" "$@"
+        ;;
+    web-input)
+        shift
+        python3 "$REPO_DIR/web-input/server.py" "$@"
+        ;;
+    proxy)
+        shift
+        python3 "$REPO_DIR/proxy/server.py" "$@"
+        ;;
+    proxy-config)
+        "${EDITOR:-nano}" "$SOPS_DIR/proxy-routes.json"
+        ;;
+    rotate-keys)
+        "$SCRIPT_DIR/rotate-keys"
+        ;;
+    export)
+        "$SCRIPT_DIR/export-secrets"
+        ;;
+    status)
+        "$SCRIPT_DIR/status"
+        ;;
+    help|--help|-h|"")
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        usage
+        exit 1
+        ;;
+esac

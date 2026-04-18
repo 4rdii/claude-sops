@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Rotate age key: generate new keypair, re-encrypt all secrets.
+
+SOPS_DIR="${CLAUDE_SOPS_DIR:-$HOME/.claude-sops}"
+KEY_FILE="$SOPS_DIR/age-key.txt"
+SOPS_CONFIG="$HOME/.sops.yaml"
+
+echo "Rotating age key..."
+
+# Backup old key
+cp "$KEY_FILE" "$KEY_FILE.bak.$(date +%s)"
+
+# Decrypt all secrets with old key
+declare -A decrypted
+for f in "$SOPS_DIR"/secrets/*.sops; do
+    [[ -f "$f" ]] || continue
+    decrypted["$f"]=$(sops --input-type dotenv --output-type dotenv -d "$f" 2>/dev/null)
+    echo "  Decrypted: $(basename "$f")"
+done
+
+# Generate new key
+age-keygen -o "$KEY_FILE" 2>/dev/null
+chmod 600 "$KEY_FILE"
+NEW_PUBKEY=$(grep -o 'age1[a-z0-9]*' "$KEY_FILE" | head -1)
+echo "$NEW_PUBKEY" > "$SOPS_DIR/age-public-key.txt"
+echo "  New public key: $NEW_PUBKEY"
+
+# Update .sops.yaml
+sed -i "s/age1[a-z0-9]*/$NEW_PUBKEY/g" "$SOPS_CONFIG"
+
+# Re-encrypt all secrets with new key
+for f in "${!decrypted[@]}"; do
+    echo "${decrypted[$f]}" | sops --input-type dotenv --output-type dotenv -e /dev/stdin > "$f"
+    echo "  Re-encrypted: $(basename "$f")"
+done
+
+echo ""
+echo "Key rotation complete."
+echo "  New key: $KEY_FILE"
+echo "  Public:  $NEW_PUBKEY"
+echo "  Backup:  $KEY_FILE.bak.*"
+echo ""
+echo "Don't forget to update any CLAUDE.md references to the public key."

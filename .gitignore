@@ -1,0 +1,12 @@
+# Never commit actual secrets or keys
+*.sops
+age-key.txt
+age-public-key.txt
+proxy-routes.json
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
